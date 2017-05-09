@@ -1,3 +1,4 @@
+
 var fs = require('fs')
 //var GoogleSpreadsheet = require('google-spreadsheet')
 const { GoogleSpreadsheet } = require('google-spreadsheet')
@@ -123,7 +124,7 @@ function cellIsValid(cell) {
 }
 
 // google spreadsheet cells into json
-exports.cellsToJson = function(allCells, options) {
+exports.cellsToJson = function(allCells, options , title) {
 
     // setting up some options, such as defining if the data is horizontal or vertical
     options = options || {}
@@ -314,8 +315,9 @@ exports.cellsToJson = function(allCells, options) {
 
         }
     })
-
-    return finalList
+    var sheetFinal = {}
+    sheetFinal[title] = finalList
+    return sheetFinal
 }
 
 exports.getWorksheets = function(options) {
@@ -353,38 +355,39 @@ exports.spreadsheetToJson = function(options) {
 
     var allWorksheets = !!options.allWorksheets
     var expectMultipleWorksheets = allWorksheets || Array.isArray(options.worksheet)
-
+    var worksheetTitles = []
     return exports.getWorksheets(options)
-        .then(function(worksheets) {
+    .then(function(worksheets) {
 
-            if (allWorksheets)
-                return worksheets
+        if (allWorksheets)
+            return worksheets
 
-            var identifiers = normalizePossibleIntList(options.worksheet, [0])
+        var identifiers = normalizePossibleIntList(options.worksheet, [0])
 
-            var selectedWorksheets = worksheets.filter(function(worksheet, index) {
-                return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
-            })
-
-            if (!expectMultipleWorksheets)
-                selectedWorksheets = selectedWorksheets.slice(0, 1)
-
-            if (selectedWorksheets.length === 0)
-                throw new Error('No worksheet found!')
-
-            return selectedWorksheets
+        var selectedWorksheets = worksheets.filter(function(worksheet, index) {
+            return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
         })
-        .then(function(worksheets) {
-            return Promise.all(worksheets.map(function(worksheet) {
-                return worksheet.getCellsAsync()
-            }))
-        })
-        .then(function(results) {
 
-            var finalList = results.map(function(allCells) {
-                return exports.cellsToJson(allCells, options)
-            })
+        if (!expectMultipleWorksheets)
+            selectedWorksheets = selectedWorksheets.slice(0, 1)
 
-            return expectMultipleWorksheets ? finalList : finalList[0]
+        if (selectedWorksheets.length === 0)
+            throw new Error('No worksheet found!')
+
+        return selectedWorksheets
+    })
+    .then(function(worksheets) {
+        return Promise.all(worksheets.map(function(worksheet) {
+            worksheetTitles.push(worksheet.title)
+            return worksheet.getCellsAsync()
+        }))
+    })
+    .then(function(results) {
+
+        var finalList = results.map(function(allCells , index) {
+            return exports.cellsToJson(allCells, options , worksheetTitles[index])
         })
+
+        return expectMultipleWorksheets ? finalList : finalList[0]
+    })
 }
