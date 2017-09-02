@@ -315,9 +315,7 @@ exports.cellsToJson = function(allCells, options , title) {
 
         }
     })
-    var sheetFinal = {}
-    sheetFinal[title] = finalList
-    return sheetFinal
+    return finalList
 }
 
 exports.getWorksheets = function(options) {
@@ -384,10 +382,12 @@ exports.spreadsheetToJson = function(options) {
     })
     .then(function(results) {
 
+        var trueKeyValue = {}
+
         var finalList = results.map(function(allCells , index) {
-            return exports.cellsToJson(allCells, options , worksheetTitles[index])
+            trueKeyValue[worksheetTitles[index]] = exports.cellsToJson(allCells, options , worksheetTitles[index])
         })
 
-        return expectMultipleWorksheets ? finalList : finalList[0]
+        return expectMultipleWorksheets ? trueKeyValue : finalList[0]
     })
 }
