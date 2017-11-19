@@ -380,6 +380,12 @@ exports.spreadsheetToJson = function(options) {
         var trueKeyValue = {}
 
         var finalList = results.map(function(allCells , index) {
+            var tabName = worksheetTitles[index]
+
+            if (tabName.charAt(0) === '_') {
+                return;
+            }
+
             trueKeyValue[worksheetTitles[index]] = exports.cellsToJson(allCells, options , worksheetTitles[index])
         })
 
