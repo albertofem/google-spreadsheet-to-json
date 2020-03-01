@@ -1,8 +1,11 @@
 var gsjson = require('./index')
 
 gsjson({
-    spreadsheetId: 'spreadsheetId',
-    token: 'token'
+    spreadsheetId: '',
+    apiKey: ''
+    // or
+    client_email: "",
+    private_key: ""
 })
 .then(function(res) {
     console.log(res)

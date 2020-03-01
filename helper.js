@@ -1,4 +1,3 @@
-
 var fs = require('fs')
 //var GoogleSpreadsheet = require('google-spreadsheet')
 const { GoogleSpreadsheet } = require('google-spreadsheet')
@@ -23,7 +22,7 @@ function parseServiceAccountCredentials(credentials) {
     if (typeof credentials === 'string') {
         try {
             return JSON.parse(credentials)
-        } catch(ex) {
+        } catch (ex) {
             return JSON.parse(fs.readFileSync(credentials, 'utf8'))
         }
     }
@@ -198,7 +197,7 @@ exports.cellsToJson = function(allCells, options) {
 
             var foundFirstCell = false
 
-            var propertyMap = headerRows.map(function (row, index) {
+            var propertyMap = headerRows.map(function(row, index) {
 
                 var headerCell = row.filter(function(cell) {
                     return cell[colProp] === colNumber
@@ -221,7 +220,7 @@ exports.cellsToJson = function(allCells, options) {
                         // then we check if the cell found has other filled cells below,
                         // and ignore it if not
 
-                        var hasCellBelow = headerRows.filter(function (r, i) {
+                        var hasCellBelow = headerRows.filter(function(r, i) {
                             return i === index - 1
                         }).some(function(r) {
                             return cellIsValid(r.filter(function(cell) {
@@ -320,30 +319,34 @@ exports.cellsToJson = function(allCells, options) {
 }
 
 exports.getWorksheets = function(options) {
-    return Promise.try(function() {
+    return Promise.try(async function() {
 
-        var spreadsheet = Promise.promisifyAll(new GoogleSpreadsheet(options.spreadsheetId))
+            var spreadsheet = Promise.promisifyAll(new GoogleSpreadsheet(options.spreadsheetId))
 
-        if (options.credentials)
-            return spreadsheet.useServiceAccountAuthAsync(parseServiceAccountCredentials(options.credentials)).return(spreadsheet)
+            if (options.credentials)
+                return spreadsheet.useServiceAccountAuthAsync(parseServiceAccountCredentials(options.credentials)).return(spreadsheet)
 
-        if (options.token) {
-            spreadsheet.setAuthToken({
-                value: options.token,
-                type: options.tokentype || 'Bearer'
-            })
-        }
+            if (options.apiKey) {
+                spreadsheet.useApiKey(options.apiKey)
+            }
 
-        return spreadsheet
-    })
-    .then(function(spreadsheet) {
-        return spreadsheet.getInfoAsync()
-    })
-    .then(function(sheetInfo) {
-        return sheetInfo.worksheets.map(function(worksheet) {
-            return Promise.promisifyAll(worksheet)
+            if (options.client_email && options.private_key) {
+                await spreadsheet.useServiceAccountAuth({
+                    client_email: options.client_email,
+                    private_key: options.private_key,
+                })
+            }
+
+            return spreadsheet
         })
-    })
+        .then(function(spreadsheet) {
+            return spreadsheet.getInfoAsync()
+        })
+        .then(function(sheetInfo) {
+            return sheetInfo.worksheets.map(function(worksheet) {
+                return Promise.promisifyAll(worksheet)
+            })
+        })
 }
 
 exports.spreadsheetToJson = function(options) {
@@ -352,36 +355,36 @@ exports.spreadsheetToJson = function(options) {
     var expectMultipleWorksheets = allWorksheets || Array.isArray(options.worksheet)
 
     return exports.getWorksheets(options)
-    .then(function(worksheets) {
+        .then(function(worksheets) {
 
-        if (allWorksheets)
-            return worksheets
+            if (allWorksheets)
+                return worksheets
 
-        var identifiers = normalizePossibleIntList(options.worksheet, [0])
+            var identifiers = normalizePossibleIntList(options.worksheet, [0])
 
-        var selectedWorksheets = worksheets.filter(function(worksheet, index) {
-            return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
+            var selectedWorksheets = worksheets.filter(function(worksheet, index) {
+                return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
+            })
+
+            if (!expectMultipleWorksheets)
+                selectedWorksheets = selectedWorksheets.slice(0, 1)
+
+            if (selectedWorksheets.length === 0)
+                throw new Error('No worksheet found!')
+
+            return selectedWorksheets
         })
-
-        if (!expectMultipleWorksheets)
-            selectedWorksheets = selectedWorksheets.slice(0, 1)
-
-        if (selectedWorksheets.length === 0)
-            throw new Error('No worksheet found!')
-
-        return selectedWorksheets
-    })
-    .then(function(worksheets) {
-        return Promise.all(worksheets.map(function(worksheet) {
-            return worksheet.getCellsAsync()
-        }))
-    })
-    .then(function(results) {
-
-        var finalList = results.map(function(allCells) {
-            return exports.cellsToJson(allCells, options)
+        .then(function(worksheets) {
+            return Promise.all(worksheets.map(function(worksheet) {
+                return worksheet.getCellsAsync()
+            }))
         })
+        .then(function(results) {
 
-        return expectMultipleWorksheets ? finalList : finalList[0]
-    })
+            var finalList = results.map(function(allCells) {
+                return exports.cellsToJson(allCells, options)
+            })
+
+            return expectMultipleWorksheets ? finalList : finalList[0]
+        })
 }
