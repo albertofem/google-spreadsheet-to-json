@@ -25,7 +25,7 @@
   "dependencies": {
     "bluebird": "^3.5.0",
     "commander": "^2.9.0",
-    "google-spreadsheet": "^2.0.3"
+    "google-spreadsheet": "https://github.com/theoephraim/node-google-spreadsheet#f261e0cf3bec5f8e7ae2396b7274a4702e373130"
   },
   "devDependencies": {
     "eslint": "^3.19.0",
