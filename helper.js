@@ -1,7 +1,6 @@
-
 var fs = require('fs')
 //var GoogleSpreadsheet = require('google-spreadsheet')
-const { GoogleSpreadsheet } = require('google-spreadsheet')
+const {GoogleSpreadsheet} = require('google-spreadsheet')
 var Promise = require('bluebird')
 
 // constants used for converting column names into number/index
@@ -41,12 +40,12 @@ function handlePropertyName(cellValue, handleMode) {
     var propertyName = (cellValue || '').trim()
 
     if (handleMode === 'camel' || handleModeType === 'undefined')
-        return getWords(propertyName.toLowerCase()).map(function(word, index) {
+        return getWords(propertyName.toLowerCase()).map(function (word, index) {
             return !index ? word : capitalize(word)
         }).join('')
 
     if (handleMode === 'pascal')
-        return getWords(propertyName.toLowerCase()).map(function(word) {
+        return getWords(propertyName.toLowerCase()).map(function (word) {
             return capitalize(word)
         }).join('')
 
@@ -100,7 +99,7 @@ function parseColIdentifier(col) {
     var colType = typeof col
 
     if (colType === 'string') {
-        return col.trim().replace(/[ \.]/i, '').toLowerCase().split('').reverse().reduce(function(totalValue, letter, index) {
+        return col.trim().replace(/[ \.]/i, '').toLowerCase().split('').reverse().reduce(function (totalValue, letter, index) {
 
             var alphaIndex = ALPHABET.indexOf(letter)
 
@@ -124,7 +123,7 @@ function cellIsValid(cell) {
 }
 
 // google spreadsheet cells into json
-exports.cellsToJson = function(allCells, options , title) {
+exports.cellsToJson = function (allCells, options, title) {
 
     // setting up some options, such as defining if the data is horizontal or vertical
     options = options || {}
@@ -140,260 +139,263 @@ exports.cellsToJson = function(allCells, options , title) {
     var ignoredDataNumbers = options.vertical ? ignoredRows : ignoredCols
     ignoredDataNumbers.sort().reverse()
 
-    var maxCol = 0
+    var maxCol = 0;
 
     // organizing (and ordering) the cells into arrays
 
-    var rows = []
+    var rows = [];
 
-    allCells.forEach(function(cell) {
+    allCells.then(function (cell) {
 
-        if (ignoredRows.indexOf(cell.row) !== -1 || ignoredCols.indexOf(cell.col) !== -1)
-            return
+        if (ignoredRows.indexOf(cell.row) !== -1 || ignoredCols.indexOf(cell.col) !== -1) {
+            return;
+        }
 
-        maxCol = Math.max(maxCol, cell[colProp])
+        maxCol = Math.max(maxCol, cell[colProp]);
 
-        var rowIndex = cell[rowProp] - 1
+        var rowIndex = cell[rowProp] - 1;
+
         if (typeof rows[rowIndex] === 'undefined')
-            rows[rowIndex] = []
+            rows[rowIndex] = [];
+
         rows[rowIndex].push(cell)
+    }).then(function() {
+        rows.forEach(function (col) {
+            col.sort(function (cell1, cell2) {
+                return cell1[colProp] - cell2[colProp]
+            })
+        });
 
-    })
+        // find the first row with data (or the specified header start line) to use it as property names
 
-    rows.forEach(function(col) {
-        col.sort(function(cell1, cell2) {
-            return cell1[colProp] - cell2[colProp]
-        })
-    })
+        for (var firstRowIndex = 0; firstRowIndex < rows.length; firstRowIndex++) {
+            var cells = rows[firstRowIndex]
 
-    // find the first row with data (or the specified header start line) to use it as property names
+            if (!cells)
+                continue
 
-    for (var firstRowIndex = 0; firstRowIndex < rows.length; firstRowIndex++) {
-        var cells = rows[firstRowIndex]
+            if (headerStartNumber && headerStartNumber !== cells[0][rowProp])
+                continue
 
-        if (!cells)
-            continue
+            break
+        }
 
-        if (headerStartNumber && headerStartNumber !== cells[0][rowProp])
-            continue
+        var properties
 
-        break
-    }
+        if (!options.listOnly) {
 
-    var properties
+            // creating the property names map (to detect the name by index),
+            // considering the header size
 
-    if (!options.listOnly) {
+            properties = {}
+            var headerEndRowIndex = firstRowIndex + headerSize - 1
 
-        // creating the property names map (to detect the name by index),
-        // considering the header size
-
-        properties = {}
-        var headerEndRowIndex = firstRowIndex + headerSize - 1
-
-        var headerRows = rows.filter(function(row, index) {
-            return index >= firstRowIndex && index <= headerEndRowIndex
-        }).reverse()
-
-        for (var colNumber = 1; colNumber <= maxCol; colNumber++) {
-
-            var foundFirstCell = false
-
-            var propertyMap = headerRows.map(function(row, index) {
-
-                var headerCell = row.filter(function(cell) {
-                    return cell[colProp] === colNumber
-                })[0]
-
-                if (!foundFirstCell && cellIsValid(headerCell))
-                    foundFirstCell = true
-
-                // the first header cell (from the bottom to top) must be from this column,
-                // so we don't check to the left
-
-                else if (foundFirstCell && !cellIsValid(headerCell)) {
-
-                    // finding the nearest filled cell to the left
-                    headerCell = row.filter(function(cell) {
-                        return cell[colProp] < colNumber
-                    }).reverse()[0]
-
-                    if (cellIsValid(headerCell)) {
-                        // then we check if the cell found has other filled cells below,
-                        // and ignore it if not
-
-                        var hasCellBelow = headerRows.filter(function(r, i) {
-                            return i === index - 1
-                        }).some(function(r) {
-                            return cellIsValid(r.filter(function(cell) {
-                                return cell[colProp] === headerCell[colProp]
-                            })[0])
-                        })
-
-                        if (!hasCellBelow)
-                            headerCell = null
-
-                    }
-                }
-
-                return headerCell
-
-            }).map(function(cell) {
-
-                if (!cellIsValid(cell))
-                    return
-
-                return handlePropertyName(cell.value, options.propertyMode)
-
-            }).filter(function(n) {
-                return n
+            var headerRows = rows.filter(function (row, index) {
+                return index >= firstRowIndex && index <= headerEndRowIndex
             }).reverse()
 
-            if (propertyMap.length)
-                properties[colNumber] = propertyMap
+            for (var colNumber = 1; colNumber <= maxCol; colNumber++) {
 
-        }
+                var foundFirstCell = false
 
-    }
+                var propertyMap = headerRows.map(function (row, index) {
 
-    // removing (or not) the first rows, before and including the ones that is used as header
-    if (!includeHeaderAsValue)
-        rows.splice(0, firstRowIndex + headerSize)
+                    var headerCell = row.filter(function (cell) {
+                        return cell[colProp] === colNumber
+                    })[0]
 
-    // iterating through remaining row to fetch the values and build the final data object
+                    if (!foundFirstCell && cellIsValid(headerCell))
+                        foundFirstCell = true
 
-    var finalList = isHashed ? {} : []
+                        // the first header cell (from the bottom to top) must be from this column,
+                    // so we don't check to the left
 
-    rows.forEach(function(cells) {
+                    else if (foundFirstCell && !cellIsValid(headerCell)) {
 
-        var newObject = options.listOnly ? [] : {}
-        var hasValues = false
+                        // finding the nearest filled cell to the left
+                        headerCell = row.filter(function (cell) {
+                            return cell[colProp] < colNumber
+                        }).reverse()[0]
 
-        cells.forEach(function(cell) {
+                        if (cellIsValid(headerCell)) {
+                            // then we check if the cell found has other filled cells below,
+                            // and ignore it if not
 
-            var val
-            var colNumber = cell[colProp]
+                            var hasCellBelow = headerRows.filter(function (r, i) {
+                                return i === index - 1
+                            }).some(function (r) {
+                                return cellIsValid(r.filter(function (cell) {
+                                    return cell[colProp] === headerCell[colProp]
+                                })[0])
+                            })
 
-            if (properties && !properties[colNumber])
-                return
+                            if (!hasCellBelow)
+                                headerCell = null
 
-            if (typeof cell.numericValue !== 'undefined') {
-                val = parseFloat(cell.numericValue)
-                hasValues = true
-            } else if (cell.value === 'TRUE') {
-                val = true
-                hasValues = true
-            } else if (cell.value === 'FALSE') {
-                val = false
-                hasValues = true
-            } else if (cell.value !== '' && typeof cell.value !== 'undefined') {
-                val = cell.value
-                hasValues = true
-            }
+                        }
+                    }
 
-            if (options.listOnly) {
-                newObject[colNumber - 1] = val
-            } else {
-                setPropertyTree(newObject, properties[colNumber], val)
-            }
+                    return headerCell
 
-        })
+                }).map(function (cell) {
 
-        if (hasValues) {
+                    if (!cellIsValid(cell))
+                        return
 
-            if (options.listOnly) {
-                // this is guaranteed because the list is sorted as needed
-                ignoredDataNumbers.forEach(function(number) {
-                    newObject.splice(number - 1, 1)
-                })
-            }
+                    return handlePropertyName(cell.value, options.propertyMode)
 
-            if (isHashed) {
-                finalList[newObject[options.hash]] = newObject
-            } else {
-                finalList.push(newObject)
+                }).filter(function (n) {
+                    return n
+                }).reverse()
+
+                if (propertyMap.length)
+                    properties[colNumber] = propertyMap
+
             }
 
         }
+
+        // removing (or not) the first rows, before and including the ones that is used as header
+        if (!includeHeaderAsValue)
+            rows.splice(0, firstRowIndex + headerSize)
+
+        // iterating through remaining row to fetch the values and build the final data object
+
+        var finalList = isHashed ? {} : []
+
+        rows.forEach(function (cells) {
+
+            var newObject = options.listOnly ? [] : {}
+            var hasValues = false
+
+            cells.forEach(function (cell) {
+
+                var val
+                var colNumber = cell[colProp]
+
+                if (properties && !properties[colNumber])
+                    return
+
+                if (typeof cell.numericValue !== 'undefined') {
+                    val = parseFloat(cell.numericValue)
+                    hasValues = true
+                } else if (cell.value === 'TRUE') {
+                    val = true
+                    hasValues = true
+                } else if (cell.value === 'FALSE') {
+                    val = false
+                    hasValues = true
+                } else if (cell.value !== '' && typeof cell.value !== 'undefined') {
+                    val = cell.value
+                    hasValues = true
+                }
+
+                if (options.listOnly) {
+                    newObject[colNumber - 1] = val
+                } else {
+                    setPropertyTree(newObject, properties[colNumber], val)
+                }
+
+            })
+
+            if (hasValues) {
+
+                if (options.listOnly) {
+                    // this is guaranteed because the list is sorted as needed
+                    ignoredDataNumbers.forEach(function (number) {
+                        newObject.splice(number - 1, 1)
+                    })
+                }
+
+                if (isHashed) {
+                    finalList[newObject[options.hash]] = newObject
+                } else {
+                    finalList.push(newObject)
+                }
+
+            }
+        });
+        return finalList
+    });
+};
+
+exports.getWorksheets = function (options) {
+    return Promise.try(async function () {
+
+        var spreadsheet = Promise.promisifyAll(new GoogleSpreadsheet(options.spreadsheetId));
+
+        if (options.credentials)
+            await spreadsheet.useServiceAccountAuth(parseServiceAccountCredentials(options.credentials));
+
+        if (options.apiKey) {
+            spreadsheet.useApiKey(options.apiKey)
+        }
+
+        if (options.client_email && options.private_key) {
+            await spreadsheet.useServiceAccountAuth({
+                client_email: options.client_email,
+                private_key: options.private_key,
+            })
+        }
+
+        return spreadsheet
     })
-    return finalList
-}
+        .then(async function (spreadsheet) {
+            await spreadsheet.loadInfo();
 
-exports.getWorksheets = function(options) {
-    return Promise.try(async function() {
-
-            var spreadsheet = Promise.promisifyAll(new GoogleSpreadsheet(options.spreadsheetId))
-
-            if (options.credentials)
-                return spreadsheet.useServiceAccountAuthAsync(parseServiceAccountCredentials(options.credentials)).return(spreadsheet)
-
-            if (options.apiKey) {
-                spreadsheet.useApiKey(options.apiKey)
-            }
-
-            if (options.client_email && options.private_key) {
-                await spreadsheet.useServiceAccountAuth({
-                    client_email: options.client_email,
-                    private_key: options.private_key,
-                })
-            }
-
-            return spreadsheet
+            return spreadsheet;
         })
-        .then(function(spreadsheet) {
-            return spreadsheet.getInfoAsync()
-        })
-        .then(function(sheetInfo) {
-            return sheetInfo.worksheets.map(function(worksheet) {
-                return Promise.promisifyAll(worksheet)
+        .then(function (sheetInfo) {
+            return sheetInfo.sheetsByIndex.map(function (worksheet) {
+                return worksheet;
             })
         })
-}
+};
 
-exports.spreadsheetToJson = function(options) {
+exports.spreadsheetToJson = function (options) {
 
     var allWorksheets = !!options.allWorksheets
     var expectMultipleWorksheets = allWorksheets || Array.isArray(options.worksheet)
     var worksheetTitles = []
     return exports.getWorksheets(options)
-    .then(function(worksheets) {
+        .then(function (worksheets) {
 
-        if (allWorksheets)
-            return worksheets
+            if (allWorksheets)
+                return worksheets
 
-        var identifiers = normalizePossibleIntList(options.worksheet, [0])
+            var identifiers = normalizePossibleIntList(options.worksheet, [0])
 
-        var selectedWorksheets = worksheets.filter(function(worksheet, index) {
-            return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
+            var selectedWorksheets = worksheets.filter(function (worksheet, index) {
+                return identifiers.indexOf(index) !== -1 || identifiers.indexOf(worksheet.title) !== -1
+            })
+
+            if (!expectMultipleWorksheets)
+                selectedWorksheets = selectedWorksheets.slice(0, 1)
+
+            if (selectedWorksheets.length === 0)
+                throw new Error('No worksheet found!')
+
+            return selectedWorksheets
         })
-
-        if (!expectMultipleWorksheets)
-            selectedWorksheets = selectedWorksheets.slice(0, 1)
-
-        if (selectedWorksheets.length === 0)
-            throw new Error('No worksheet found!')
-
-        return selectedWorksheets
-    })
-    .then(function(worksheets) {
-        return Promise.all(worksheets.map(function(worksheet) {
-            worksheetTitles.push(worksheet.title)
-            return worksheet.getCellsAsync()
-        }))
-    })
-    .then(function(results) {
-
-        var trueKeyValue = {}
-
-        var finalList = results.map(function(allCells , index) {
-            var tabName = worksheetTitles[index]
-
-            if (tabName.charAt(0) === '_') {
-                return;
-            }
-
-            trueKeyValue[worksheetTitles[index]] = exports.cellsToJson(allCells, options , worksheetTitles[index])
+        .then(function (worksheets) {
+            return worksheets.map(async function (worksheet) {
+                worksheetTitles.push(worksheet.title);
+                return await worksheet.getRows();
+            });
         })
+        .then(function (results) {
+            var trueKeyValue = {};
 
-        return expectMultipleWorksheets ? trueKeyValue : finalList[0]
-    })
+            var finalList = results.map(function (allCells, index) {
+                var tabName = worksheetTitles[index];
+
+                if (tabName.charAt(0) === '_') {
+                    return;
+                }
+
+                trueKeyValue[worksheetTitles[index]] = exports.cellsToJson(allCells, options, worksheetTitles[index])
+            });
+
+            return expectMultipleWorksheets ? trueKeyValue : finalList[0]
+        })
 }
